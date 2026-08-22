@@ -43,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir publish
-          cp Filmmirasim/build/Filmmirasim.cs3 publish/
+          cp */build/*.cs3 publish/
           cp build/plugins.json publish/
           cp repo.json publish/
           cd publish

@@ -46,7 +46,7 @@ subprojects {
     }
 
     android {
-        namespace = "com.cloudtvstream.filmmirasim"
+        namespace = "com.zaganit.${project.name.lowercase()}"
 
         defaultConfig {
             minSdk = 21
