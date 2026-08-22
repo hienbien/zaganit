@@ -333,25 +333,24 @@ class NetFilimProvider : MainAPI() {
         return try {
             val watchHtml = app.get(data, referer = "$mainUrl/").text
             val matches = SOURCE_REGEX.findAll(watchHtml).toList()
+
+            // Asıl film kaynakları: YouTube (fragman) olanlar hariç tutulur,
+            // böylece oynat'a basınca doğrudan film açılır. Fragmanlar detay
+            // sayfasındaki "Fragmanlar" bölümünde ayrıca sunulur.
+            val directSources = matches.mapNotNull { match ->
+                val streamUrl = decodeSource(match.groupValues[1]) ?: return@mapNotNull null
+                if (streamUrl.isYoutubeUrl()) return@mapNotNull null
+                streamUrl to match.groupValues[2].trim()
+            }
+
             var linkFound = false
 
-            matches.forEachIndexed { index, match ->
-                val streamUrl = decodeSource(match.groupValues[1]) ?: return@forEachIndexed
-                val label = match.groupValues[2].trim()
-
-                if (streamUrl.isYoutubeUrl()) {
-                    // YouTube kaynakları (fragman vb.) dahili çıkarıcı ile denenir
-                    if (loadExtractor(streamUrl, data, subtitleCallback, callback)) {
-                        linkFound = true
-                    }
-                    return@forEachIndexed
-                }
-
+            directSources.forEachIndexed { index, (streamUrl, label) ->
                 callback(
                     newExtractorLink(
                         source = name,
                         name = label.ifBlank {
-                            if (matches.size > 1) "$name ${index + 1}" else name
+                            if (directSources.size > 1) "$name ${index + 1}" else name
                         },
                         url = streamUrl,
                         type = if (streamUrl.contains(".m3u8", ignoreCase = true)) {
@@ -369,6 +368,18 @@ class NetFilimProvider : MainAPI() {
                     }
                 )
                 linkFound = true
+            }
+
+            if (!linkFound) {
+                // Asıl akış yoksa (örn. yalnızca fragmanı olan bölümler) YouTube kaynağı
+                // oynatılabilir kaynak olarak denenir
+                matches.forEach { match ->
+                    val streamUrl = decodeSource(match.groupValues[1]) ?: return@forEach
+                    if (!streamUrl.isYoutubeUrl()) return@forEach
+                    if (loadExtractor(streamUrl, data, subtitleCallback, callback)) {
+                        linkFound = true
+                    }
+                }
             }
 
             SUBTITLE_REGEX.findAll(watchHtml).forEach { match ->
