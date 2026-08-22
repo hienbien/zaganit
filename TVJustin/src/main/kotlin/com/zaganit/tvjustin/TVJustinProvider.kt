@@ -2,6 +2,7 @@ package com.zaganit.tvjustin
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.api.Log
@@ -30,7 +31,9 @@ class TVJustinProvider : MainAPI() {
         "tennis" to "Tenis"
     )
 
-    private val mapper = jacksonObjectMapper()
+    private val mapper = jacksonObjectMapper().apply {
+        configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true)
+    }
     private var cache: ScheduleCache? = null
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -78,6 +81,7 @@ class TVJustinProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val title = queryValue(url, "title") ?: return null
+        val poster = queryValue(url, "poster") ?: POSTER_URL
         val league = queryValue(url, "league")
         val date = queryValue(url, "date")
         val time = queryValue(url, "time")
@@ -91,7 +95,7 @@ class TVJustinProvider : MainAPI() {
         )
 
         return newLiveStreamLoadResponse(title, url, url) {
-            posterUrl = POSTER_URL
+            posterUrl = poster
             plot = details.joinToString(" • ").ifBlank { "TVJustin canlı yayını" }
             tags = listOfNotNull(league?.takeIf { it.isNotBlank() })
         }
@@ -138,7 +142,7 @@ class TVJustinProvider : MainAPI() {
             ).text
             val sections = linkedMapOf(
                 "schedule" to parseArray(script, "karsilasmalar"),
-                "channels" to parseArray(script, "channels"),
+                "channels" to parseArray(script, "channels").map { it.copy(isChannel = true) },
                 "football" to parseArray(script, "futbolMatches"),
                 "basketball" to parseArray(script, "basketbolMatches"),
                 "volleyball" to parseArray(script, "voleybolMatches"),
@@ -175,12 +179,17 @@ class TVJustinProvider : MainAPI() {
         val itemTitle = title?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val id = url?.let { queryValue(it, "id") }?.takeIf { it.isValidStreamId() }
             ?: return null
+        val poster = if (isChannel) channelPoster(id) ?: POSTER_URL else POSTER_URL
         val dataUrl = buildString {
             append(mainUrl)
             append("/event.html?id=")
             append(encode(id))
             append("&title=")
             append(encode(itemTitle))
+            if (isChannel) {
+                append("&poster=")
+                append(encode(poster))
+            }
             league?.takeIf { it.isNotBlank() }?.let {
                 append("&league=")
                 append(encode(it))
@@ -196,7 +205,7 @@ class TVJustinProvider : MainAPI() {
         }
 
         return newLiveSearchResponse(itemTitle, dataUrl, TvType.Live, fix = false) {
-            posterUrl = POSTER_URL
+            posterUrl = poster
         }
     }
 
@@ -370,6 +379,51 @@ class TVJustinProvider : MainAPI() {
         return Regex("""^https?://[^/]+""").find(url)?.value ?: mainUrl
     }
 
+    private fun channelPoster(id: String): String? {
+        val source = when (id) {
+            "androstreamlivebs1" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-1-hz-int.png")
+            "androstreamlivebs2" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-2-hz-int.png")
+            "androstreamlivebs3" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-3-hz-int.png")
+            "androstreamlivebs4" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-4-hz-int.png")
+            "androstreamlivebs5" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-5-hz-int.png")
+            "androstreamlivebsm1" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-1-max-hz-int.png")
+            "androstreamlivebsm2" -> tvLogo("countries/international/beinsports/old/horizontal/bein-sports-2-max-hz-int.png")
+            "androstreamlivess1" -> tvLogo("countries/turkey/s-sport-tr.png")
+            "androstreamlivess2" -> tvLogo("countries/turkey/s-sport-2-tr.png")
+            "androstreamlivessplus1" -> tvLogo("countries/turkey/s-sport-plus-tr.png")
+            "androstreamlivees1" -> tvLogo("countries/france/eurosport-1-fr.png")
+            "androstreamlivees2" -> tvLogo("countries/france/eurosport-2-fr.png")
+            "androstreamliveidm" -> tvLogo("countries/azerbaijan/idman-tv-tr.png")
+            "androstreamlivetrt1" -> tvLogo("countries/turkey/trt-1-tr.png")
+            "androstreamlivetrts" -> tvLogo("countries/turkey/trt-spor-tr.png")
+            "androstreamlivetrtsy" -> tvLogo("countries/turkey/trt-spor-yildiz-tr.png")
+            "androstreamliveatv" -> tvLogo("countries/turkey/atv-tr.png")
+            "androstreamliveas" -> tvLogo("countries/turkey/a-spor-tr.png")
+            "androstreamlivea2" -> tvLogo("countries/turkey/a2-tr.png")
+            "androstreamlivetjk" -> tvLogo("countries/turkey/tjk-tv-tr.png")
+            "androstreamliveht" -> HT_SPOR_LOGO
+            "androstreamlivenba" -> tvLogo("countries/united-states/nba-tv-us.png")
+            "androstreamlivetv8" -> tvLogo("countries/turkey/tv8-tr.png")
+            "androstreamlivetv85" -> tvLogo("countries/turkey/tv85-tr.png")
+            "androstreamlivefb" -> tvLogo("countries/turkey/fenerbahce-tv-tr.png")
+            "androstreamlivecbcs" -> CBC_SPORT_LOGO
+            "androstreamlivegs" -> tvLogo("countries/turkey/galatasaray-tv-tr.png")
+            "androstreamlivesptstv" -> tvLogo("countries/turkey/sports-tv-tr.png")
+            else -> when {
+                id.startsWith("androstreamlivets") -> TIVIBU_LOGO
+                id.startsWith("androstreamlivesm") -> tvLogo("countries/turkey/spor-smart-hd-tr.png")
+                id.startsWith("androstreamlivetb") -> TABII_LOGO
+                id.startsWith("androstreamliveexn") -> EXXEN_LOGO
+                else -> null
+            }
+        } ?: return null
+
+        return "$IMAGE_CDN?url=${encode(source.removePrefix("https://"))}" +
+            "&w=640&h=400&fit=contain&bg=111827&output=png"
+    }
+
+    private fun tvLogo(path: String): String = "$TV_LOGO_BASE/$path"
+
     private fun String.isValidStreamId(): Boolean {
         return isNotBlank() &&
             !endsWith("None", ignoreCase = true) &&
@@ -392,7 +446,8 @@ class TVJustinProvider : MainAPI() {
         @JsonProperty("league") val league: String? = null,
         @JsonProperty("title") val title: String? = null,
         @JsonProperty("url") val url: String? = null,
-        @JsonProperty("live") val live: Boolean? = null
+        @JsonProperty("live") val live: Boolean? = null,
+        val isChannel: Boolean = false
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -414,6 +469,18 @@ class TVJustinProvider : MainAPI() {
         private const val DEFAULT_DYNAMIC_HOST = "https://favorisentv1o6.xyz"
         private const val DEFAULT_CINEMA_API = "https://streamsport365.com/cinema"
         private const val DEFAULT_PPH_PREFIX = "https://pph.player-us.xyz/tv/?stream_id="
+        private const val IMAGE_CDN = "https://wsrv.nl/"
+        private const val TV_LOGO_BASE = "https://raw.githubusercontent.com/tv-logo/tv-logos/main"
+        private const val TIVIBU_LOGO =
+            "https://r2.thesportsdb.com/images/media/channel/logo/awecs51642604534.png"
+        private const val HT_SPOR_LOGO =
+            "https://www.dsmart.com.tr/api/v1/public/images/kanallar/HT_SPOR_LOGO.png"
+        private const val TABII_LOGO =
+            "https://upload.wikimedia.org/wikipedia/commons/7/74/Tabii_-_TRT_Logo.png"
+        private const val CBC_SPORT_LOGO =
+            "https://www.affa.az/images/19832/991/49/2/11_3/CBC_Sport.jpg"
+        private const val EXXEN_LOGO =
+            "https://upload.wikimedia.org/wikipedia/commons/d/db/Exxen.png"
 
         private val CHECKLIST_BASE_REGEX =
             Regex("""["'](https?://[^"']+/checklist/)["']""", RegexOption.IGNORE_CASE)
