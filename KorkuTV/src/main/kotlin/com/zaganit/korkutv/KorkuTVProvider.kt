@@ -356,67 +356,31 @@ class KorkuTVProvider : MainAPI() {
                 "X-Requested-With" to "XMLHttpRequest",
                 "Accept" to "*/*"
             )
-            var emitted = false
+            // NOT: /m3/ varyant blob'lari kisa omurlu oldugundan yayinlanMAZ; tek link
+            // olarak dogrulanmis master.txt verilir, oynatici XHR basligiyle ceker.
             runCatching {
-                val masterText = app.get(sourceUrl, headers = masterHeaders, referer = embedUrl).text
-                if (masterText.startsWith("#EXTM3U")) {
-                    val lines = masterText.lines()
-                    var i = 0
-                    while (i < lines.size - 1) {
-                        val line = lines[i].trim()
-                        if (line.startsWith("#EXT-X-STREAM-INF")) {
-                            var uriLine = lines[i + 1].trim()
-                            i++
-                            while (uriLine.startsWith("#") && i < lines.size - 1) {
-                                uriLine = lines[i + 1].trim(); i++
-                            }
-                            if (uriLine.isNotBlank() && !uriLine.startsWith("#")) {
-                                val absUri = if (uriLine.startsWith("http")) uriLine
-                                    else sourceUrl.substringBeforeLast('/') + "/" + uriLine.removePrefix("/")
-                                val qName = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.get(1)
-                                val res = Regex("""RESOLUTION=\d+x(\d+)""").find(line)?.groupValues?.get(1)
-                                val qualityLabel = qName ?: res?.let { "${it}p" }
-                                callback(
-                                    newExtractorLink(
-                                        source = name,
-                                        name = "$name ${qualityLabel ?: ""}".trim(),
-                                        url = absUri,
-                                        type = ExtractorLinkType.M3U8
-                                    ) {
-                                        this.referer = base
-                                        quality = getQualityFromName(qualityLabel ?: "")
-                                        headers = mapOf(
-                                            "User-Agent" to USER_AGENT,
-                                            "Referer" to "$base/"
-                                        )
-                                    }
-                                )
-                                emitted = true
-                            }
-                        }
-                        i++
-                    }
+                val probe = app.get(sourceUrl, headers = masterHeaders, referer = embedUrl).text
+                if (!probe.startsWith("#EXTM3U")) {
+                    Log.w(name, "Master dogrulamasi basarisiz, yine de deneniyor")
                 }
             }
 
-            if (!emitted) {
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = name,
-                        url = sourceUrl,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        this.referer = base
-                        quality = getQualityFromName("")
-                        headers = mapOf(
-                            "User-Agent" to USER_AGENT,
-                            "Referer" to embedUrl,
-                            "X-Requested-With" to "XMLHttpRequest"
-                        )
-                    }
-                )
-            }
+            callback(
+                newExtractorLink(
+                    source = name,
+                    name = name,
+                    url = sourceUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = base
+                    quality = getQualityFromName("")
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to embedUrl,
+                        "X-Requested-With" to "XMLHttpRequest"
+                    )
+                }
+            )
             true
         } catch (error: Exception) {
             Log.w(name, "FirePlayer cozulemedi ($embedUrl): ${error.message}")
