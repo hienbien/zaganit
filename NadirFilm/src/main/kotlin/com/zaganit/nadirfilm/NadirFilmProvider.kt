@@ -2,8 +2,11 @@ package com.zaganit.nadirfilm
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.getQualityFromName
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Element
 
 class NadirFilmProvider : MainAPI() {
@@ -157,8 +160,46 @@ class NadirFilmProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
+            // Once normal yol
             val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").text
-            EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
+            val viaEmbeds = EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
+            if (viaEmbeds) return true
+
+            // vidsrcme tarzi WASM-korumali oynaticilar: sayfayi gercek WebView'de acip
+            // oynaticinin kendi cektigi medya istegini yakala
+            Log.i(name, "WebView yolu deneniyor ($data)")
+            val viaWebView = runCatching {
+                val resolver = WebViewResolver(Regex("""\.(?:m3u8|mp4)(\?.*)?$"""))
+                val response = app.get(
+                    data,
+                    interceptor = resolver,
+                    headers = mapOf("User-Agent" to DESKTOP_UA),
+                    referer = "$mainUrl/"
+                )
+                val mediaUrl = response.url
+                if (!mediaUrl.startsWith("http")) return@runCatching false
+
+                val origin = mediaUrl.split("/").take(3).joinToString("/")
+                val cookieHeader = runCatching {
+                    android.webkit.CookieManager.getInstance().getCookie(origin)
+                }.getOrNull()
+
+                val headers = mutableMapOf("User-Agent" to DESKTOP_UA)
+                if (!cookieHeader.isNullOrBlank()) headers["Cookie"] = cookieHeader
+
+                callback(
+                    newExtractorLink(
+                        source = name, name = name, url = mediaUrl,
+                        type = if (mediaUrl.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        this.referer = data
+                        quality = getQualityFromName("")
+                        this.headers = headers
+                    }
+                )
+                true
+            }.getOrDefault(false)
+            return viaWebView
         } catch (error: Exception) {
             Log.e(name, "Baglantilar cozulemedi ($data): ${error.message}")
             false

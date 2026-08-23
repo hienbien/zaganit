@@ -2,6 +2,7 @@ package com.zaganit.korkutv
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.getQualityFromName
@@ -322,63 +323,100 @@ class KorkuTVProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            val hash = embedUrl.substringAfter("/video/").trimEnd('/').substringBefore('?')
-            if (hash.isBlank()) return false
             val base = embedUrl.substringBefore("/video/")
-            val apiUrl =
-                "$base/player/index.php?data=$hash&do=getVideo"
 
-            val response = app.post(
-                apiUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to embedUrl,
-                    "X-Requested-With" to "XMLHttpRequest",
-                    "Accept" to "*/*"
-                ),
-                referer = embedUrl
-            ).text
-
-            val json = runCatching { org.json.JSONObject(response) }.getOrNull()
-                ?: return false
-            val sourceUrl = json.optString("videoSource").replace("\\/", "/")
-                .takeIf { it.startsWith("http") }
-                ?: json.optString("securedLink").replace("\\/", "/")
-                    .takeIf { it.startsWith("http") }
-                ?: return false
-
-            // Ana playlist'i KENDIMIZ cekip dogrulariz; koruma 200+"security error"
-            // dondugunde ExoPlayer "malformed manifest" verir. Varyant playlist'ler
-            // genelde korumasizdir -> kalite etiketleriyle dogrudan onlari veririz.
-            val masterHeaders = mapOf(
-                "User-Agent" to USER_AGENT,
-                "Referer" to embedUrl,
-                "X-Requested-With" to "XMLHttpRequest",
-                "Accept" to "*/*"
-            )
-            // NOT: /m3/ varyant blob'lari kisa omurlu oldugundan yayinlanMAZ; tek link
-            // olarak dogrulanmis master.txt verilir, oynatici XHR basligiyle ceker.
-            runCatching {
-                val probe = app.get(sourceUrl, headers = masterHeaders, referer = embedUrl).text
-                if (!probe.startsWith("#EXTM3U")) {
-                    Log.w(name, "Master dogrulamasi basarisiz, yine de deneniyor")
+            // 1) Once hizli API yolu (WebView gerektirmeyen)
+            val hash = embedUrl.substringAfter("/video/").trimEnd('/').substringBefore('?')
+            var sourceUrl: String? = null
+            if (hash.isNotBlank()) {
+                runCatching {
+                    val response = app.post(
+                        "$base/player/index.php?data=$hash&do=getVideo",
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to embedUrl,
+                            "X-Requested-With" to "XMLHttpRequest",
+                            "Accept" to "*/*"
+                        ),
+                        referer = embedUrl
+                    ).text
+                    val json = runCatching { org.json.JSONObject(response) }.getOrNull()
+                    sourceUrl = json?.optString("videoSource")?.replace("\\/", "/")
+                        ?.takeIf { it.startsWith("http") }
                 }
             }
 
-            callback(
-                newExtractorLink(
-                    source = name,
-                    name = name,
-                    url = sourceUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.referer = base
-                    quality = getQualityFromName("")
-                    headers = mapOf(
+            if (sourceUrl != null) {
+                // 2) Master'i dogrula; calisiyorsa XHR basligiyla tek link ver
+                val ok = runCatching {
+                    app.get(
+                        sourceUrl!!,
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "X-Requested-With" to "XMLHttpRequest",
+                            "Accept" to "*/*"
+                        ),
+                        referer = embedUrl
+                    ).text.startsWith("#EXTM3U")
+                }.getOrDefault(false)
+
+                if (ok) {
+                    // WebView'in site cerezlerini de ekle (varsa)
+                    val cookieHeader = runCatching {
+                        android.webkit.CookieManager.getInstance().getCookie(base)
+                    }.getOrNull()
+
+                    val headers = mutableMapOf(
                         "User-Agent" to USER_AGENT,
-                        "Referer" to embedUrl,
                         "X-Requested-With" to "XMLHttpRequest"
                     )
+                    if (!cookieHeader.isNullOrBlank()) headers["Cookie"] = cookieHeader
+
+                    callback(
+                        newExtractorLink(
+                            source = name, name = name, url = sourceUrl!!,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = embedUrl
+                            quality = getQualityFromName("")
+                            this.headers = headers
+                        }
+                    )
+                    return true
+                }
+            }
+
+            // 3) API yolu basarisiz -> WebView ile sayfayi gercek tarayici gibi ac,
+            //    sitenin kendi oynaticisinin cektigi master.txt istegini yakala
+            Log.i(name, "FirePlayer WebView yolu deneniyor ($embedUrl)")
+            val resolver = WebViewResolver(Regex("""master\.txt|/cdn/hls/"""))
+            val response = app.get(
+                embedUrl,
+                interceptor = resolver,
+                referer = "$base/"
+            )
+            val webViewUrl = response.url
+            if (!webViewUrl.startsWith("http")) return false
+
+            val cookieHeader = runCatching {
+                android.webkit.CookieManager.getInstance().getCookie(base)
+            }.getOrNull()
+
+            val headers = mutableMapOf(
+                "User-Agent" to USER_AGENT,
+                "X-Requested-With" to "XMLHttpRequest",
+                "Accept" to "*/*"
+            )
+            if (!cookieHeader.isNullOrBlank()) headers["Cookie"] = cookieHeader
+
+            callback(
+                newExtractorLink(
+                    source = name, name = name, url = webViewUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = embedUrl
+                    quality = getQualityFromName("")
+                    this.headers = headers
                 }
             )
             true

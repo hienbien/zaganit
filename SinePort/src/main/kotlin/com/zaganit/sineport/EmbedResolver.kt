@@ -3,6 +3,7 @@ package com.zaganit.sineport
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.getQualityFromName
@@ -100,7 +101,7 @@ object EmbedResolver {
 
     private fun getQualityUnknown(): Int = 0
 
-    // FirePlayer ailesi (movietube, vidpapi): imzali HLS master playlist'i getirir
+    // FirePlayer ailesi (movietube, vidpapi): once API + dogrulama, olmazsa WebView
     private suspend fun resolveFirePlayer(
         embedUrl: String,
         sourceName: String,
@@ -110,53 +111,86 @@ object EmbedResolver {
         val hash = embedUrl.substringAfter("/video/").trimEnd('/').substringBefore('?')
         if (hash.isBlank()) return false
         val base = embedUrl.substringBefore("/video/")
-        val response = app.post(
-            "$base/player/index.php?data=$hash&do=getVideo",
-            headers = mapOf(
-                "User-Agent" to userAgent,
-                "Referer" to embedUrl,
-                "X-Requested-With" to "XMLHttpRequest",
-                "Accept" to "*/*"
-            ),
-            referer = embedUrl
-        ).text
 
-        val json = runCatching { org.json.JSONObject(response) }.getOrNull() ?: return false
-        val sourceUrl = json.optString("videoSource").replace("\\/", "/").takeIf { it.startsWith("http") }
-            ?: json.optString("securedLink").replace("\\/", "/").takeIf { it.startsWith("http") }
-            ?: return false
-
-        // Ana playlist'i KENDIMIZ cekip dogrulariz; koruma 200+"security error" metni
-        // dondugunde ExoPlayer "malformed manifest" verir. Varyant playlist'ler genelde
-        // korumasizdir -> kalite etiketleriyle dogrudan onlari veririz.
-        val masterHeaders = mapOf(
-            "User-Agent" to userAgent,
-            "Referer" to embedUrl,
-            "X-Requested-With" to "XMLHttpRequest",
-            "Accept" to "*/*"
-        )
-        // NOT: /m3/ varyant blob'lari kisa omurlu/oturuma bagli oldugundan yayinlanMAZ.
-        // Tek link olarak dogrulanmis master.txt verilir; oynatici tum zinciri
-        // X-Requested-With basligiyle kendi ceker.
+        var sourceUrl: String? = null
         runCatching {
-            val probe = app.get(sourceUrl, headers = masterHeaders, referer = embedUrl).text
-            if (!probe.startsWith("#EXTM3U")) {
-                Log.w(sourceName, "Master dogrulamasi basarisiz, yine de deneniyor")
-            }
-        }
-
-        callback(
-            newExtractorLink(source = sourceName, name = sourceName, url = sourceUrl, type = ExtractorLinkType.M3U8) {
-                this.referer = base
-                quality = getQualityUnknown()
+            val response = app.post(
+                "$base/player/index.php?data=$hash&do=getVideo",
                 headers = mapOf(
                     "User-Agent" to userAgent,
                     "Referer" to embedUrl,
-                    "X-Requested-With" to "XMLHttpRequest"
-                )
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Accept" to "*/*"
+                ),
+                referer = embedUrl
+            ).text
+            val json = runCatching { org.json.JSONObject(response) }.getOrNull()
+            sourceUrl = json?.optString("videoSource")?.replace("\\/", "/")
+                ?.takeIf { it.startsWith("http") }
+        }
+
+        if (sourceUrl != null) {
+            val ok = runCatching {
+                app.get(
+                    sourceUrl!!,
+                    headers = mapOf(
+                        "User-Agent" to userAgent,
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "Accept" to "*/*"
+                    ),
+                    referer = embedUrl
+                ).text.startsWith("#EXTM3U")
+            }.getOrDefault(false)
+
+            if (ok) {
+                emitFirePlayerLink(sourceUrl!!, base, embedUrl, sourceName, userAgent, callback)
+                return true
+            }
+        }
+
+        // WebView yolu: gercek tarayici motoru sayfayi acar, kendi oynaticisi master'i ceker
+        Log.i(sourceName, "FirePlayer WebView yolu ($embedUrl)")
+        runCatching {
+            val resolver = WebViewResolver(Regex("""master\.txt|/cdn/hls/"""))
+            val response = app.get(embedUrl, interceptor = resolver, referer = "$base/")
+            val webViewUrl = response.url
+            if (webViewUrl.startsWith("http")) {
+                emitFirePlayerLink(webViewUrl, base, embedUrl, sourceName, userAgent, callback)
+                return true
+            }
+        }
+        return false
+    }
+
+    private suspend fun emitFirePlayerLink(
+        url: String,
+        base: String,
+        embedUrl: String,
+        sourceName: String,
+        userAgent: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val cookieHeader = runCatching {
+            android.webkit.CookieManager.getInstance().getCookie(base)
+        }.getOrNull()
+
+        val headers = mutableMapOf(
+            "User-Agent" to userAgent,
+            "X-Requested-With" to "XMLHttpRequest",
+            "Accept" to "*/*"
+        )
+        if (!cookieHeader.isNullOrBlank()) headers["Cookie"] = cookieHeader
+
+        callback(
+            newExtractorLink(
+                source = sourceName, name = sourceName, url = url,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = embedUrl
+                quality = getQualityUnknown()
+                this.headers = headers
             }
         )
-        return true
     }
 
     // Embed sayfasinda duz m3u8/mp4 arar (vidmoly vb.)
