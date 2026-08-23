@@ -57,16 +57,21 @@ class NetDiziHDProvider : MainAPI() {
         if (!hrefRaw.startsWith("http")) return null
         if (!hrefRaw.contains("/shows/details/")) return null
 
+        // Rozet simgeleri (ic-premium vb.) hariç gerçek posteri seç
+        val posterImg = select("img").firstOrNull { img ->
+            val src = (img.attr("src") + "|" + img.attr("data-src")).lowercase()
+            !src.contains("site_assets") && !src.contains("ic-premium")
+        }
+
         var titleCandidate: String? = anchor.attr("title").trim()
         if (titleCandidate.isNullOrBlank()) {
             titleCandidate = selectFirst("span.video-item-content")?.text()?.trim()
         }
         if (titleCandidate.isNullOrBlank()) {
-            titleCandidate = selectFirst("img")?.attr("title")?.trim()
+            titleCandidate = posterImg?.attr("title")?.trim()
         }
         val title = titleCandidate.takeIf { !it.isNullOrBlank() } ?: return null
 
-        val posterImg = selectFirst("img")
         val posterSrc = posterImg?.attr("src")?.trim().takeIf { !it.isNullOrBlank() }
             ?: posterImg?.attr("data-src")?.trim().takeIf { !it.isNullOrBlank() }
         val poster = posterSrc?.let { fixUrlSafe(it) }
@@ -189,15 +194,23 @@ class NetDiziHDProvider : MainAPI() {
             return parseEpisodesFromDocument(seriesDocument, season = 1)
         }
 
-        return seasonUrls.entries.sortedBy { it.value }.flatMap { (seasonUrl, seasonNumber) ->
+        // Sezonlar paralel yüklenir (çok sezonlu dizilerde hız için)
+        val parsed = seasonUrls.entries.sortedBy { it.value }.amap { entry ->
             try {
-                val seasonDocument = app.get(seasonUrl, referer = seriesUrl).document
-                parseEpisodesFromDocument(seasonDocument, seasonNumber)
+                val seasonDocument = app.get(entry.key, referer = seriesUrl).document
+                parseEpisodesFromDocument(seasonDocument, entry.value)
             } catch (error: Exception) {
-                Log.w(name, "Sezon yüklenemedi ($seasonUrl): ${error.message}")
+                Log.w(name, "Sezon yüklenemedi (${entry.key}): ${error.message}")
                 emptyList()
             }
+        }.flatten()
+
+        // Sezon sayfalarından bölüm çıkmadıysa dizi sayfasını doğrudan dene
+        if (parsed.isEmpty()) {
+            return parseEpisodesFromDocument(seriesDocument, season = 1)
         }
+
+        return parsed
     }
 
     private fun parseEpisodesFromDocument(
@@ -228,8 +241,13 @@ class NetDiziHDProvider : MainAPI() {
             val explicitNumber = Regex("(?:bolum|bölüm)-?(\\d+)", RegexOption.IGNORE_CASE)
                 .find(episodeSlug)?.groupValues?.get(1)?.toIntOrNull()
 
-            val episodePoster = card.selectFirst("img")?.attr("src")?.trim()
-                ?.takeIf { it.isNotBlank() }?.let { fixUrlSafe(it) }
+            val episodePoster = card.select("img").firstOrNull { img ->
+                val src = (img.attr("src") + "|" + img.attr("data-src")).lowercase()
+                !src.contains("site_assets") && !src.contains("ic-premium")
+            }?.let { posterImg ->
+                posterImg.attr("src").trim().takeIf { it.isNotBlank() }
+                    ?: posterImg.attr("data-src").trim().takeIf { it.isNotBlank() }
+            }?.let { fixUrlSafe(it) }
 
             episodes.add(
                 newEpisode(episodeHref) {

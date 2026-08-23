@@ -79,16 +79,21 @@ class NetFilimProvider : MainAPI() {
         // Dizi listelerinde yalnızca seri detay kartlarını kabul et
         if (isShow && !hrefRaw.contains("/shows/details/")) return null
 
+        // Rozet simgeleri (ic-premium vb.) hariç gerçek posteri seç
+        val posterImg = select("img").firstOrNull { img ->
+            val src = (img.attr("src") + "|" + img.attr("data-src")).lowercase()
+            !src.contains("site_assets") && !src.contains("ic-premium")
+        }
+
         var titleCandidate: String? = anchor.attr("title").trim()
         if (titleCandidate.isNullOrBlank()) {
             titleCandidate = selectFirst("span.video-item-content")?.text()?.trim()
         }
         if (titleCandidate.isNullOrBlank()) {
-            titleCandidate = selectFirst("img")?.attr("title")?.trim()
+            titleCandidate = posterImg?.attr("title")?.trim()
         }
         val title = titleCandidate.takeIf { !it.isNullOrBlank() } ?: return null
 
-        val posterImg = selectFirst("img")
         val posterSrc = posterImg?.attr("src")?.trim().takeIf { !it.isNullOrBlank() }
             ?: posterImg?.attr("data-src")?.trim().takeIf { !it.isNullOrBlank() }
         val poster = posterSrc?.let { fixUrlSafe(it) }
@@ -251,7 +256,7 @@ class NetFilimProvider : MainAPI() {
             return parseEpisodesFromDocument(seriesDocument, season = 1)
         }
 
-        return seasonUrls.entries.toList().amap { entry ->
+        val parsed = seasonUrls.entries.toList().amap { entry ->
             try {
                 val seasonDocument = app.get(entry.key, referer = seriesUrl).document
                 parseEpisodesFromDocument(seasonDocument, entry.value)
@@ -259,7 +264,14 @@ class NetFilimProvider : MainAPI() {
                 Log.w(name, "Sezon yüklenemedi (${entry.key}): ${error.message}")
                 emptyList()
             }
-        }.flatten().sortedWith(compareBy({ it.season ?: 1 }, { it.episode ?: 0 }))
+        }.flatten()
+
+        // Sezon sayfalarından bölüm çıkmadıysa dizi sayfasını doğrudan dene
+        if (parsed.isEmpty()) {
+            return parseEpisodesFromDocument(seriesDocument, season = 1)
+        }
+
+        return parsed.sortedWith(compareBy({ it.season ?: 1 }, { it.episode ?: 0 }))
     }
 
     private fun parseEpisodesFromDocument(document: Element, season: Int): List<Episode> {
@@ -285,8 +297,13 @@ class NetFilimProvider : MainAPI() {
                 ?: Regex("(?:bolum|bölüm)\\s*(\\d+)", RegexOption.IGNORE_CASE)
                     .find(episodeTitle)?.groupValues?.get(1)?.toIntOrNull()
 
-            val episodePoster = card.selectFirst("img")?.attr("src")?.trim()
-                ?.takeIf { it.isNotBlank() }?.let { fixUrlSafe(it) }
+            val episodePoster = card.select("img").firstOrNull { img ->
+                val src = (img.attr("src") + "|" + img.attr("data-src")).lowercase()
+                !src.contains("site_assets") && !src.contains("ic-premium")
+            }?.let { posterImg ->
+                posterImg.attr("src").trim().takeIf { it.isNotBlank() }
+                    ?: posterImg.attr("data-src").trim().takeIf { it.isNotBlank() }
+            }?.let { fixUrlSafe(it) }
 
             newEpisode(episodeHref) {
                 this.name = episodeTitle
