@@ -1,0 +1,262 @@
+[
+    {
+        "fileHash": "sha256-8731c6e3017c7548b3a1c8b71526613110a1b1df6e07c9391016b8a8c2313a04",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 15821,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 5,
+        "internalName": "CanliTV",
+        "description": "CanliTV.Watch: T\u00fcrkiye canl\u0131 TV kanallar\u0131. Ulusal, haber, spor, m\u00fczik ve daha fazlas\u0131 HD kalitede.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/CanliTV.cs3",
+        "name": "CanliTV"
+    },
+    {
+        "fileHash": "sha256-b54b673d7aa78ecff0f6cd9d808cabd15602a613b8652291e60837794872c63e",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 14182,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 6,
+        "internalName": "DaddyLive",
+        "description": "DaddyLive: Canl\u0131 spor yay\u0131nlar\u0131 - futbol, basketbol, tenis, F1, NFL ve daha fazlas\u0131.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/DaddyLive.cs3",
+        "name": "DaddyLive"
+    },
+    {
+        "fileHash": "sha256-79e0d634fc74de9a6b41756468e6df118b40de7bda151040e4b1c1656b41d7ee",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 36218,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "FilmDozu",
+        "description": "FilmDozu: HD film ve dizi izle. T\u00fcrk\u00e7e dublaj/altyaz\u0131l\u0131, t\u00fcrler, arama.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/FilmDozu.cs3",
+        "name": "FilmDozu"
+    },
+    {
+        "iconUrl": "https://filmmirasim.ktb.gov.tr/favicon-r.png",
+        "fileHash": "sha256-9bfdf383cdbf27260b9f8a287963814df0235504eeae12bff69cdf2d32d1daf4",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 14823,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Documentary"
+        ],
+        "version": 2,
+        "internalName": "Filmmirasim",
+        "description": "T.C. K\u00fclt\u00fcr ve Turizm Bakanl\u0131\u011f\u0131 Film Miras\u0131m ar\u015fivindeki belgesel filmler.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/Filmmirasim.cs3",
+        "name": "Filmmirasim"
+    },
+    {
+        "fileHash": "sha256-a7794c99b6a40742339ac7cf632c950f7a93049e01d5765810a21783e1bbfa88",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 35715,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "FilmZal",
+        "description": "FilmZal: HD filmler ve diziler. T\u00fcrk\u00e7e/Azerbaycanca dublaj deste\u011fi.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/FilmZal.cs3",
+        "name": "FilmZal"
+    },
+    {
+        "fileHash": "sha256-f9ff9f45e159c78a9aa948b6a9cc256b5a304abf10530aa0b4b4d49b3698507f",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 36234,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "HDFilmizleTo",
+        "description": "HDFilmizle: HD film izle, T\u00fcrk\u00e7e dublaj film izle, yabanc\u0131 diziler.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/HDFilmizleTo.cs3",
+        "name": "HDFilmizleTo"
+    },
+    {
+        "iconUrl": "https://korku.tv/favicon.ico",
+        "fileHash": "sha256-c7a39adc6776477fc5371cff1e9047e0fef310ebfcc9111965c79675cc74264c",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 29201,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 5,
+        "internalName": "KorkuTV",
+        "description": "KorkuTV: Korku, gerilim, gizem filmleri ve korku dizileri. T\u00fcrk\u00e7e dublaj/altyaz\u0131l\u0131, IMDb 7+, \u00e7oklu kalite ve b\u00f6l\u00fcm deste\u011fi.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/KorkuTV.cs3",
+        "name": "KorkuTV"
+    },
+    {
+        "fileHash": "sha256-74f5413eb7e1b5083322ce3998e1ba68544978b1e9f7bda9509825fbbe0261b4",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 36115,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "KultFilmler",
+        "description": "KultFilmler: K\u00fclt ve se\u00e7kin filmler + mini diziler. T\u00fcrk\u00e7e dublaj/altyaz\u0131l\u0131.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/KultFilmler.cs3",
+        "name": "KultFilmler"
+    },
+    {
+        "fileHash": "sha256-35640b578d65d938f35aa1166075de7436e0732118cfbac0aee60a9f187d710d",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 37743,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "NadirFilm",
+        "description": "Nadir Film: 1080p T\u00fcrk\u00e7e altyaz\u0131l\u0131 ve dublajl\u0131 filmler. Koleksiyonlar ve seriler.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/NadirFilm.cs3",
+        "name": "NadirFilm"
+    },
+    {
+        "iconUrl": "https://netdizihd.com/upload/favicon.ico",
+        "fileHash": "sha256-353c55cb3b32758fb25ce2cdc9806304364722240c0d1741cfede9e61ec554f8",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 26731,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 2,
+        "internalName": "NetDiziHD",
+        "description": "NetDiziHD: Yerli ve yabanc\u0131 diziler. Sezon/b\u00f6l\u00fcm deste\u011fi, T\u00fcrk\u00e7e altyaz\u0131 dosyalar\u0131, \u00e7oklu \u00e7\u00f6z\u00fcn\u00fcrl\u00fck, oyuncu/y\u00f6netmen bilgisi ve g\u00fcncel b\u00f6l\u00fcmler.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/NetDiziHD.cs3",
+        "name": "NetDiziHD"
+    },
+    {
+        "iconUrl": "https://netfilim13.com/upload/favicon.ico",
+        "fileHash": "sha256-9089a2d918273c92c3493d8b8a833d56b95c2dcc60de9b671b95662080310075",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 31764,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 2,
+        "internalName": "NetFilim",
+        "description": "NetFilim: Yerli ve yabanc\u0131 filmler ile diziler. T\u00fcrk\u00e7e dublaj, T\u00fcrk\u00e7e altyaz\u0131l\u0131, \u00e7oklu \u00e7\u00f6z\u00fcn\u00fcrl\u00fck (1080p/480p), altyaz\u0131 dosyalar\u0131, fragmanlar, oyuncu/y\u00f6netmen bilgisi ve t\u00fcr kategorileriyle tam kapsaml\u0131.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/NetFilim.cs3",
+        "name": "NetFilim"
+    },
+    {
+        "fileHash": "sha256-6c6853e2a1ca78def4e21351e133cf5bb620a0c3c17f43e78e11e0f4bb6ccad5",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 35330,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "SinePort",
+        "description": "SinePort: Film ve dizi izle. T\u00fcrler, arama, do\u011frudan MP4 yay\u0131nlar.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/SinePort.cs3",
+        "name": "SinePort"
+    },
+    {
+        "iconUrl": "https://tvjustin.com/favicon.png",
+        "fileHash": "sha256-7de296fef05cf4d452bdf1dce4f5c987df8476e5c795f35cbde01802efe8caac",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/hienbien/zaganit",
+        "fileSize": 31078,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "zaganit"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 2,
+        "internalName": "TVJustin",
+        "description": "TVJustin canl\u0131 spor kar\u015f\u0131la\u015fmalar\u0131 ve 7/24 TV kanallar\u0131.",
+        "url": "https://raw.githubusercontent.com/hienbien/zaganit/builds/TVJustin.cs3",
+        "name": "TVJustin"
+    }
+]

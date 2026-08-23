@@ -1,0 +1,8 @@
+{
+  "name": "zaganit",
+  "description": "Türkçe CloudStream eklentileri",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/hienbien/zaganit/refs/heads/builds/plugins.json"
+  ]
+}
