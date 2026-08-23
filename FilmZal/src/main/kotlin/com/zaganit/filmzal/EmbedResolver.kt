@@ -85,11 +85,28 @@ object EmbedResolver {
                         }
                     }
                     else -> {
-                        if (runCatching { loadExtractor(url, siteUrl, subtitleCallback, callback) }.getOrDefault(false)) {
-                            found = true
-                        } else if (resolveDirectMedia(url, sourceName, siteUrl, userAgent, callback)) {
-                            found = true
+                        val viaExtractor = runCatching {
+                            loadExtractor(url, siteUrl, subtitleCallback, callback)
+                        }.getOrDefault(false)
+                        var viaDirect = false
+                        var viaWebView = false
+                        if (!viaExtractor) {
+                            viaDirect = resolveDirectMedia(url, sourceName, siteUrl, userAgent, callback)
+                            if (!viaDirect) {
+                                // Son care: embed'i gercek WebView'de acip oynaticinin
+                                // cektigi medya istegini yakala (vidrame/azefilmzal vb.)
+                                Log.i(sourceName, "Embed WebView yolu ($url)")
+                                viaWebView = runCatching {
+                                    val resolver = WebViewResolver(Regex("""\.(?:m3u8|mp4)(?:\?.*)?$"""))
+                                    val response = app.get(url, interceptor = resolver, referer = siteUrl)
+                                    val mediaUrl = response.url
+                                    if (!mediaUrl.startsWith("http")) return@runCatching false
+                                    callback(directLink(sourceName, mediaUrl, url, userAgent))
+                                    true
+                                }.getOrDefault(false)
+                            }
                         }
+                        if (viaExtractor || viaDirect || viaWebView) found = true
                     }
                 }
             } catch (error: Exception) {

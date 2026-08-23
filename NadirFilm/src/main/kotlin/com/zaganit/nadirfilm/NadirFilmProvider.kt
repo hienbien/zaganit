@@ -17,17 +17,22 @@ class NadirFilmProvider : MainAPI() {
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
+    // Sitenin GERCEK kategori slug'lari (bilim-kurgu/polisiye YOK; eksik satirlar dolduruldu)
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Tum Filmler",
         "$mainUrl/en-cok-begenilen-filmler/" to "En Cok Begenilen Filmler",
         "$mainUrl/kategori/aksiyon/" to "Aksiyon",
-        "$mainUrl/kategori/gerilim/" to "Gerilim",
-        "$mainUrl/kategori/korku/" to "Korku",
-        "$mainUrl/kategori/dram/" to "Dram",
-        "$mainUrl/kategori/komedi/" to "Komedi",
-        "$mainUrl/kategori/bilim-kurgu/" to "Bilim Kurgu",
         "$mainUrl/kategori/macera/" to "Macera",
-        "$mainUrl/kategori/polisiye/" to "Polisiye"
+        "$mainUrl/kategori/animasyon/" to "Animasyon",
+        "$mainUrl/kategori/aile/" to "Aile",
+        "$mainUrl/kategori/fantastik/" to "Fantastik",
+        "$mainUrl/kategori/dram/" to "Dram",
+        "$mainUrl/kategori/korku/" to "Korku",
+        "$mainUrl/kategori/gerilim/" to "Gerilim",
+        "$mainUrl/kategori/komedi/" to "Komedi",
+        "$mainUrl/kategori/suc/" to "Suc",
+        "$mainUrl/kategori/romantik/" to "Romantik",
+        "$mainUrl/kategori/gizem/" to "Gizem"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
