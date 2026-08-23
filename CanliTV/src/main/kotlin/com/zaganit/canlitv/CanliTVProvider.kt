@@ -1,4 +1,4 @@
-package com.zaganit.canlitv
+﻿package com.zaganit.canlitv
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
@@ -105,7 +105,7 @@ class CanliTVProvider : MainAPI() {
         if (!data.startsWith("http")) return false
         return try {
             val html = app.get(data, referer = "$mainUrl/").text
-            val embed = Regex("""\"embedUrl\"\s*:\s*\"([a-z]+):(\d+)\"""")
+            val embed = Regex("\"embedUrl\"\\s*:\\s*\"([a-z]+):(\\d+)\"")
                 .find(html)?.groupValues ?: return false
             val provider = embed[1]
             val id = embed[2]

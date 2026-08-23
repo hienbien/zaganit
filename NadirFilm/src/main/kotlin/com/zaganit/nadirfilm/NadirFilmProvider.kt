@@ -35,7 +35,7 @@ class NadirFilmProvider : MainAPI() {
             "${request.data.trimEnd('/')}/"
         }
         return try {
-            val document = app.get(url, referer = "$mainUrl/").document
+            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
             val results = document.select("a[href]").mapNotNull { it.toSearchResult() }
                 .distinctBy { it.url }
             newHomePageResponse(
@@ -88,7 +88,7 @@ class NadirFilmProvider : MainAPI() {
     override suspend fun search(query: String, page: Int): SearchResponseList {
         if (page > 1) return newSearchResponseList(emptyList(), hasNext = false)
         return try {
-            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), referer = "$mainUrl/").document
+            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
             val results = document.select("a[href]").mapNotNull { it.toSearchResult() }.distinctBy { it.url }
             newSearchResponseList(results, hasNext = false)
         } catch (error: Exception) {
@@ -100,7 +100,7 @@ class NadirFilmProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query, 1).items
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, referer = "$mainUrl/").document
+        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
 
         val rawTitle = document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim().orEmpty()
@@ -157,7 +157,7 @@ class NadirFilmProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, referer = "$mainUrl/").text
+            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").text
             EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
         } catch (error: Exception) {
             Log.e(name, "Baglantilar cozulemedi ($data): ${error.message}")
@@ -168,6 +168,9 @@ class NadirFilmProvider : MainAPI() {
     companion object {
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 10; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+        private const val DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
         private val STATIC_SLUGS = setOf(
             "bize-ulasin", "en-cok-begenilen-filmler", "seri-filmler", "hukuksal", "dmca",

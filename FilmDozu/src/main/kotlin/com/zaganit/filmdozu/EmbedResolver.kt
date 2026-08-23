@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
@@ -125,17 +126,70 @@ object EmbedResolver {
             ?: json.optString("securedLink").replace("\\/", "/").takeIf { it.startsWith("http") }
             ?: return false
 
-        callback(
-            newExtractorLink(source = sourceName, name = sourceName, url = sourceUrl, type = ExtractorLinkType.M3U8) {
-                this.referer = base
-                quality = getQualityUnknown()
-                headers = mapOf(
-                    "User-Agent" to userAgent,
-                    "Referer" to embedUrl,
-                    "X-Requested-With" to "XMLHttpRequest"
-                )
-            }
+        // Ana playlist'i KENDIMIZ cekip dogrulariz; koruma 200+"security error" metni
+        // dondugunde ExoPlayer "malformed manifest" verir. Varyant playlist'ler genelde
+        // korumasizdir -> kalite etiketleriyle dogrudan onlari veririz.
+        val masterHeaders = mapOf(
+            "User-Agent" to userAgent,
+            "Referer" to embedUrl,
+            "X-Requested-With" to "XMLHttpRequest",
+            "Accept" to "*/*"
         )
+        var emitted = false
+        runCatching {
+            val masterText = app.get(sourceUrl, headers = masterHeaders, referer = embedUrl).text
+            if (masterText.startsWith("#EXTM3U")) {
+                val lines = masterText.lines()
+                var i = 0
+                while (i < lines.size - 1) {
+                    val line = lines[i].trim()
+                    if (line.startsWith("#EXT-X-STREAM-INF")) {
+                        var uriLine = lines[i + 1].trim()
+                        i++
+                        while (uriLine.startsWith("#") && i < lines.size - 1) {
+                            uriLine = lines[i + 1].trim(); i++
+                        }
+                        if (uriLine.isNotBlank() && !uriLine.startsWith("#")) {
+                            val absUri = if (uriLine.startsWith("http")) uriLine
+                                else sourceUrl.substringBeforeLast('/') + "/" + uriLine.removePrefix("/")
+                            val name = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.get(1)
+                            val res = Regex("""RESOLUTION=(\d+x(\d+))""").find(line)?.groupValues?.get(2)
+                            val qualityLabel = name ?: res?.let { "${it}p" }
+                            callback(
+                                newExtractorLink(
+                                    source = sourceName, name = "$sourceName ${qualityLabel ?: ""}".trim(),
+                                    url = absUri, type = ExtractorLinkType.M3U8
+                                ) {
+                                    this.referer = base
+                                    quality = getQualityFromName(qualityLabel ?: "")
+                                    headers = mapOf(
+                                        "User-Agent" to userAgent,
+                                        "Referer" to base + "/"
+                                    )
+                                }
+                            )
+                            emitted = true
+                        }
+                    }
+                    i++
+                }
+            }
+        }
+
+        if (!emitted) {
+            // Dogrulama basarisiz -> orijinal URL ile en iyi cabasi
+            callback(
+                newExtractorLink(source = sourceName, name = sourceName, url = sourceUrl, type = ExtractorLinkType.M3U8) {
+                    this.referer = base
+                    quality = getQualityUnknown()
+                    headers = mapOf(
+                        "User-Agent" to userAgent,
+                        "Referer" to embedUrl,
+                        "X-Requested-With" to "XMLHttpRequest"
+                    )
+                }
+            )
+        }
         return true
     }
 
@@ -153,7 +207,8 @@ object EmbedResolver {
                 headers = mapOf("User-Agent" to userAgent, "Referer" to siteUrl),
                 referer = siteUrl
             ).text
-            val media = DIRECT_MEDIA_REGEX.find(body)?.value ?: return false
+            val body2 = decode(body)
+            val media = DIRECT_MEDIA_REGEX.find(body2)?.value ?: return false
             callback(directLink(sourceName, media, embedUrl, userAgent))
             true
         } catch (error: Exception) {

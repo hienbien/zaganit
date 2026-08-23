@@ -25,7 +25,7 @@ class DaddyLiveProvider : MainAPI() {
             return newHomePageResponse(request.name, emptyList<SearchResponse>(), false)
         }
         return try {
-            val document = app.get(request.data, referer = "$mainUrl/").document
+            val document = app.get(request.data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"), referer = "$mainUrl/").document
             val results = document.select(
                 "a.upcoming-card[href*=\"stream-\"], a[href*=\"/stream/stream-\"]"
             ).mapNotNull { it.toChannel() }.distinctBy { it.url }
@@ -40,7 +40,12 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     private fun Element.toChannel(): SearchResponse? {
-        val hrefRaw = attr("abs:href").ifBlank { attr("href") }
+        val hrefRaw0 = attr("abs:href").ifBlank { attr("href") }
+        val hrefRaw = when {
+            hrefRaw0.startsWith("http") -> hrefRaw0
+            hrefRaw0.startsWith("/") -> mainUrl + hrefRaw0
+            else -> return null
+        }
         if (!hrefRaw.startsWith(mainUrl)) return null
         if (!hrefRaw.contains("/stream/stream-")) return null
 
@@ -59,7 +64,7 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, referer = "$mainUrl/").document
+        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"), referer = "$mainUrl/").document
         val rawTitle = document.selectFirst("h1, h2, .page-title, .channel-title")?.text()?.trim()
             ?: url.substringAfterLast('/').removeSuffix(".php")
         val title = rawTitle.ifBlank { throw ErrorLoadingException("Baslik bulunamadi: $url") }
@@ -81,7 +86,7 @@ class DaddyLiveProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, referer = "$mainUrl/").text
+            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Referer" to "$mainUrl/"), referer = "$mainUrl/").text
             // Kanal sayfasindaki ilk iframe'in kaynagini al
             val embedSrc = Regex("""<iframe[^>]*(?:src|data-src)="([^"]+)"""", RegexOption.IGNORE_CASE)
                 .find(html)?.groupValues?.get(1)
@@ -95,7 +100,7 @@ class DaddyLiveProvider : MainAPI() {
 
             val embedHtml = app.get(
                 embedUrl,
-                headers = mapOf("User-Agent" to USER_AGENT),
+                headers = mapOf("User-Agent" to DESKTOP_UA),
                 referer = "$mainUrl/"
             ).text
 
@@ -133,5 +138,8 @@ class DaddyLiveProvider : MainAPI() {
     companion object {
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 10; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+        private const val DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 }
