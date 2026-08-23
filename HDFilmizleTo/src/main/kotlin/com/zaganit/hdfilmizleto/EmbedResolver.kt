@@ -130,7 +130,8 @@ object EmbedResolver {
         }
 
         if (sourceUrl != null) {
-            val ok = runCatching {
+            // 2) Master'i indir; gecerliyse en iyi varyanti + master'i birlikte ver
+            val masterText = runCatching {
                 app.get(
                     sourceUrl!!,
                     headers = mapOf(
@@ -139,11 +140,11 @@ object EmbedResolver {
                         "Accept" to "*/*"
                     ),
                     referer = embedUrl
-                ).text.startsWith("#EXTM3U")
-            }.getOrDefault(false)
+                ).text
+            }.getOrNull()
 
-            if (ok) {
-                emitFirePlayerLink(sourceUrl!!, base, embedUrl, sourceName, userAgent, callback)
+            if (masterText != null && masterText.startsWith("#EXTM3U")) {
+                emitFirePlayerLinks(masterText, sourceUrl!!, base, embedUrl, sourceName, userAgent, callback)
                 return true
             }
         }
@@ -160,6 +161,88 @@ object EmbedResolver {
             }
         }
         return false
+    }
+
+    // Master playlist'ten en yuksek cozunurluklu varyanti bulup onu + master'i yayinla.
+    // Varyantlar (m3/BASE64) artik oturum gerektirmiyor; yine de master fallback olarak kalir.
+    private suspend fun emitFirePlayerLinks(
+        masterText: String,
+        masterUrl: String,
+        base: String,
+        embedUrl: String,
+        sourceName: String,
+        userAgent: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val cookieHeader = runCatching {
+            android.webkit.CookieManager.getInstance().getCookie(base)
+        }.getOrNull()
+
+        fun baseHeaders(): MutableMap<String, String> {
+            val h = mutableMapOf(
+                "User-Agent" to userAgent,
+                "X-Requested-With" to "XMLHttpRequest",
+                "Accept" to "*/*"
+            )
+            if (!cookieHeader.isNullOrBlank()) h["Cookie"] = cookieHeader
+            return h
+        }
+
+        val lines = masterText.lines()
+        var bestHeight = 0
+        var bestUrl: String? = null
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (line.startsWith("#EXT-X-STREAM-INF")) {
+                val height = Regex("""RESOLUTION=\d+x(\d+)""").find(line)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val uri = lines.getOrNull(i + 1)?.trim()?.takeIf { it.isNotBlank() && !it.startsWith("#") }
+                if (uri != null && height > bestHeight) {
+                    bestHeight = height
+                    bestUrl = resolveAgainst(masterUrl, uri)
+                }
+                i += 2
+                continue
+            }
+            i++
+        }
+
+        if (bestUrl != null) {
+            callback(
+                newExtractorLink(
+                    source = sourceName, name = sourceName, url = bestUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = embedUrl
+                    quality = if (bestHeight > 0) getQualityFromName("${bestHeight}p") else 0
+                    this.headers = baseHeaders()
+                }
+            )
+        }
+        callback(
+            newExtractorLink(
+                source = sourceName, name = "$sourceName (master)", url = masterUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = embedUrl
+                quality = 0
+                this.headers = baseHeaders()
+            }
+        )
+    }
+
+    private fun resolveAgainst(baseUrl: String, uri: String): String {
+        return when {
+            uri.startsWith("http://") || uri.startsWith("https://") -> uri
+            uri.startsWith("//") -> "https:$uri"
+            uri.startsWith("/") -> {
+                val schemeEnd = baseUrl.indexOf("://")
+                val hostStart = schemeEnd + 3
+                val pathStart = baseUrl.indexOf('/', hostStart)
+                if (pathStart > 0) baseUrl.substring(0, pathStart) + uri else baseUrl + uri
+            }
+            else -> baseUrl.substringBeforeLast('/') + "/" + uri
+        }
     }
 
     private suspend fun emitFirePlayerLink(

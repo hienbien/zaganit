@@ -2,6 +2,7 @@ package com.zaganit.filmdozu
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import org.jsoup.nodes.Element
@@ -13,6 +14,9 @@ class FilmDozuProvider : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
+
+    // Cloudflare challenge'ini WebView ile cozer; tek ornek (cerezler korunsun)
+    private val cfKiller by lazy { CloudflareKiller() }
 
     override val mainPage = mainPageOf(
         "$mainUrl/dublaj/" to "Turkce Dublajli",
@@ -38,7 +42,7 @@ class FilmDozuProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page > 1) "${request.data.trimEnd('/')}/page/$page/" else request.data
         return try {
-            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             val results = document.select("a[href*=\"/film/\"], a[href*=\"/dizi/\"]")
                 .mapNotNull { it.toSearchResult() }
                 .distinctBy { it.url }
@@ -53,7 +57,8 @@ class FilmDozuProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val hrefRaw = attr("abs:href").ifBlank { attr("href") }
+        // Yeni tema goreli href veriyor (/film/slug); abs:href guvenilmez, elle coz
+        val hrefRaw = fix(attr("href").trim())
         if (!hrefRaw.startsWith(mainUrl)) return null
         val path = hrefRaw.removePrefix(mainUrl).trimStart('/')
         // Icerik: /film/{slug} veya /dizi/{slug}; kategori/liste sayfalari elenir
@@ -75,7 +80,7 @@ class FilmDozuProvider : MainAPI() {
         val title = titleCandidate
 
         val poster = listOf(img.attr("data-src"), img.attr("src"))
-            .firstOrNull { it.trim().startsWith("http") }?.let { fix(it) }
+            .firstOrNull { it.trim().isNotBlank() && !it.trim().startsWith("data:") }?.let { fix(it.trim()) }
 
         return if (hrefRaw.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, hrefRaw, TvType.TvSeries) { this.posterUrl = poster }
@@ -94,7 +99,7 @@ class FilmDozuProvider : MainAPI() {
     override suspend fun search(query: String, page: Int): SearchResponseList {
         if (page > 1) return newSearchResponseList(emptyList(), hasNext = false)
         return try {
-            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             val results = document.select("a[href*=\"/film/\"], a[href*=\"/dizi/\"]")
                 .mapNotNull { it.toSearchResult() }.distinctBy { it.url }
             newSearchResponseList(results, hasNext = false)
@@ -107,7 +112,7 @@ class FilmDozuProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query, 1).items
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
 
         val rawTitle = document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim().orEmpty()
@@ -165,7 +170,7 @@ class FilmDozuProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").text
+            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).text
             EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
         } catch (error: Exception) {
             Log.e(name, "Baglantilar cozulemedi ($data): ${error.message}")

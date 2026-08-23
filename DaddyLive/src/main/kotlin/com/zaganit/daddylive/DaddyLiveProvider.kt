@@ -2,6 +2,7 @@ package com.zaganit.daddylive
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -16,16 +17,23 @@ class DaddyLiveProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Live Channels",
-        "$mainUrl/24-7-channels.php" to "24/7 Channels"
+        "$mainUrl/" to "Live Channels"
     )
+
+    // Cloudflare challenge'ini WebView ile cozer; her istekte yeniden olusturma (cerezler silinir)
+    private val cfKiller by lazy { CloudflareKiller() }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         if (page > 1) {
             return newHomePageResponse(request.name, emptyList<SearchResponse>(), false)
         }
         return try {
-            val document = app.get(request.data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"), referer = "$mainUrl/").document
+            val document = app.get(
+                request.data,
+                headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"),
+                referer = "$mainUrl/",
+                interceptor = cfKiller
+            ).document
             val results = document.select(
                 "a.upcoming-card[href*=\"stream-\"], a[href*=\"/stream/stream-\"]"
             ).mapNotNull { it.toChannel() }.distinctBy { it.url }
@@ -64,7 +72,12 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"), referer = "$mainUrl/").document
+        val document = app.get(
+            url,
+            headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html"),
+            referer = "$mainUrl/",
+            interceptor = cfKiller
+        ).document
         val rawTitle = document.selectFirst("h1, h2, .page-title, .channel-title")?.text()?.trim()
             ?: url.substringAfterLast('/').removeSuffix(".php")
         val title = rawTitle.ifBlank { throw ErrorLoadingException("Baslik bulunamadi: $url") }
@@ -86,7 +99,12 @@ class DaddyLiveProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Referer" to "$mainUrl/"), referer = "$mainUrl/").text
+            val html = app.get(
+                data,
+                headers = mapOf("User-Agent" to DESKTOP_UA, "Referer" to "$mainUrl/"),
+                referer = "$mainUrl/",
+                interceptor = cfKiller
+            ).text
             // Kanal sayfasindaki ilk iframe'in kaynagini al
             val embedSrc = Regex("""<iframe[^>]*(?:src|data-src)="([^"]+)"""", RegexOption.IGNORE_CASE)
                 .find(html)?.groupValues?.get(1)

@@ -2,6 +2,7 @@ package com.zaganit.filmzal
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import org.jsoup.nodes.Element
@@ -14,28 +15,20 @@ class FilmZalProvider : MainAPI() {
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
+    // /tur/* sayfalari AJAX ile yuklendigi icin HTML'de kart YOK; sunucu tarafinda
+    // dolu olan /film/ ve /diziler/ sayfalari kullanilir (page/N/ ile sayfalanir)
+    // Cloudflare challenge'ini WebView ile cozer; tek ornek (cerezler korunsun)
+    private val cfKiller by lazy { CloudflareKiller() }
+
     override val mainPage = mainPageOf(
         "$mainUrl/film/" to "Filmler",
-        "$mainUrl/tur/aksiyon/" to "Aksiyon",
-        "$mainUrl/tur/macera/" to "Macera",
-        "$mainUrl/tur/animasyon/" to "Animasyon",
-        "$mainUrl/tur/bilim-kurgu/" to "Bilim Kurgu",
-        "$mainUrl/tur/komedi/" to "Komedi",
-        "$mainUrl/tur/dram/" to "Dram",
-        "$mainUrl/tur/fantastik/" to "Fantastik",
-        "$mainUrl/tur/gerilim/" to "Gerilim",
-        "$mainUrl/tur/gizem/" to "Gizem",
-        "$mainUrl/tur/korku/" to "Korku",
-        "$mainUrl/tur/romantik/" to "Romantik",
-        "$mainUrl/tur/savas/" to "Savas",
-        "$mainUrl/tur/polisiye/" to "Polisiye",
-        "$mainUrl/tur/aile/" to "Aile"
+        "$mainUrl/diziler/" to "Diziler"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page > 1) "${request.data.trimEnd('/')}/page/$page/" else request.data
         return try {
-            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             // Kartlar div.poster ailesinde; genel anchor yaklasimi da guvenli
             val results = document.select("div.poster a[href], a[href*=\"/film/\"]")
                 .mapNotNull { it.toSearchResult() }.distinctBy { it.url }
@@ -50,7 +43,8 @@ class FilmZalProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val hrefRaw = attr("abs:href").ifBlank { attr("href") }
+        // abs:href guvenilmez (base URI yok); goreli href'leri elle coz
+        val hrefRaw = fix(attr("href").trim())
         if (!hrefRaw.startsWith(mainUrl)) return null
         val path = hrefRaw.removePrefix(mainUrl).trimStart('/').removeSuffix("/")
         // Icerik: film/{slug}, dizi/{slug} veya diziler/{slug}
@@ -77,9 +71,10 @@ class FilmZalProvider : MainAPI() {
         if (titleCandidate.isBlank() || img == null) return null
         val title = titleCandidate
 
-        // src 1px placeholder (data:image/png) olabilir -> once data-src tercih et
+        // 1px placeholder (data:image/png) olabilir -> gecerli ilk kaynagi coz
         val poster = listOf(img.attr("data-src"), img.attr("src"))
-            .firstOrNull { it.trim().startsWith("http") }?.let { fix(it) }
+            .firstOrNull { it.trim().startsWith("http") || it.trim().startsWith("/") }
+            ?.let { fix(it.trim()) }
 
         return if (isSeries) {
             newTvSeriesSearchResponse(titleCandidate, hrefRaw, TvType.TvSeries) { this.posterUrl = poster }
@@ -98,7 +93,7 @@ class FilmZalProvider : MainAPI() {
     override suspend fun search(query: String, page: Int): SearchResponseList {
         if (page > 1) return newSearchResponseList(emptyList(), hasNext = false)
         return try {
-            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             val results = document.select("div.poster a[href], a[href*=\"/film/\"], a[href*=\"/dizi\"]")
                 .mapNotNull { it.toSearchResult() }.distinctBy { it.url }
             newSearchResponseList(results, hasNext = false)
@@ -111,7 +106,7 @@ class FilmZalProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query, 1).items
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
 
         val rawTitle = document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim().orEmpty()
@@ -135,7 +130,7 @@ class FilmZalProvider : MainAPI() {
         return if (isSeries) {
             val episodes = mutableListOf<Episode>()
             document.select("a[href*=\"/bolum/\"], a[href*=\"bolum\"]").forEach { anchor ->
-                val href = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
+                val href = fix(anchor.attr("href").trim())
                 if (!href.startsWith("http")) return@forEach
                 var epTitle = anchor.attr("title").trim().ifBlank { anchor.text().trim() }
                 if (epTitle.isBlank()) return@forEach
@@ -170,7 +165,7 @@ class FilmZalProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").text
+            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).text
             EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
         } catch (error: Exception) {
             Log.e(name, "Baglantilar cozulemedi ($data): ${error.message}")

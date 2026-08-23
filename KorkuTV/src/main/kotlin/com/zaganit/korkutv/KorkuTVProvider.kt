@@ -347,8 +347,8 @@ class KorkuTVProvider : MainAPI() {
             }
 
             if (sourceUrl != null) {
-                // 2) Master'i dogrula; calisiyorsa XHR basligiyla tek link ver
-                val ok = runCatching {
+                // 2) Master'i indir; gecerliyse en iyi varyanti + master'i birlikte ver
+                val masterText = runCatching {
                     app.get(
                         sourceUrl!!,
                         headers = mapOf(
@@ -357,31 +357,11 @@ class KorkuTVProvider : MainAPI() {
                             "Accept" to "*/*"
                         ),
                         referer = embedUrl
-                    ).text.startsWith("#EXTM3U")
-                }.getOrDefault(false)
+                    ).text
+                }.getOrNull()
 
-                if (ok) {
-                    // WebView'in site cerezlerini de ekle (varsa)
-                    val cookieHeader = runCatching {
-                        android.webkit.CookieManager.getInstance().getCookie(base)
-                    }.getOrNull()
-
-                    val headers = mutableMapOf(
-                        "User-Agent" to USER_AGENT,
-                        "X-Requested-With" to "XMLHttpRequest"
-                    )
-                    if (!cookieHeader.isNullOrBlank()) headers["Cookie"] = cookieHeader
-
-                    callback(
-                        newExtractorLink(
-                            source = name, name = name, url = sourceUrl!!,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.referer = embedUrl
-                            quality = getQualityFromName("")
-                            this.headers = headers
-                        }
-                    )
+                if (masterText != null && masterText.startsWith("#EXTM3U")) {
+                    emitFirePlayerCandidates(masterText, sourceUrl!!, base, embedUrl, callback)
                     return true
                 }
             }
@@ -423,6 +403,83 @@ class KorkuTVProvider : MainAPI() {
         } catch (error: Exception) {
             Log.w(name, "FirePlayer cozulemedi ($embedUrl): ${error.message}")
             false
+        }
+    }
+
+    // Master playlist'ten en yuksek cozunurluklu varyanti bulup onu + master'i yayinla
+    private suspend fun emitFirePlayerCandidates(
+        masterText: String,
+        masterUrl: String,
+        base: String,
+        embedUrl: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val cookieHeader = runCatching {
+            android.webkit.CookieManager.getInstance().getCookie(base)
+        }.getOrNull()
+
+        fun baseHeaders(): MutableMap<String, String> {
+            val h = mutableMapOf(
+                "User-Agent" to USER_AGENT,
+                "X-Requested-With" to "XMLHttpRequest",
+                "Accept" to "*/*"
+            )
+            if (!cookieHeader.isNullOrBlank()) h["Cookie"] = cookieHeader
+            return h
+        }
+
+        val lines = masterText.lines()
+        var bestHeight = 0
+        var bestUrl: String? = null
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (line.startsWith("#EXT-X-STREAM-INF")) {
+                val height = Regex("""RESOLUTION=\d+x(\d+)""").find(line)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val uri = lines.getOrNull(i + 1)?.trim()?.takeIf { it.isNotBlank() && !it.startsWith("#") }
+                if (uri != null && height > bestHeight) {
+                    bestHeight = height
+                    bestUrl = resolveAgainst(masterUrl, uri)
+                }
+                i += 2
+                continue
+            }
+            i++
+        }
+
+        if (bestUrl != null) {
+            callback(
+                newExtractorLink(
+                    source = name, name = name, url = bestUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = embedUrl
+                    quality = if (bestHeight > 0) getQualityFromName("${bestHeight}p") else getQualityFromName("")
+                    this.headers = baseHeaders()
+                }
+            )
+        }
+        callback(
+            newExtractorLink(
+                source = name, name = "$name (master)", url = masterUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = embedUrl
+                quality = getQualityFromName("")
+                this.headers = baseHeaders()
+            }
+        )
+    }
+
+    private fun resolveAgainst(baseUrl: String, uri: String): String {
+        return when {
+            uri.startsWith("http://") || uri.startsWith("https://") -> uri
+            uri.startsWith("//") -> "https:$uri"
+            uri.startsWith("/") -> {
+                val pathStart = baseUrl.indexOf('/', baseUrl.indexOf("://") + 3)
+                if (pathStart > 0) baseUrl.substring(0, pathStart) + uri else baseUrl + uri
+            }
+            else -> baseUrl.substringBeforeLast('/') + "/" + uri
         }
     }
 

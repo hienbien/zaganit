@@ -91,10 +91,10 @@ class CanliTVProvider : MainAPI() {
     }
 
     /**
-     * Yayin akisi:
-     *  1. Kanal sayfasindaki JSON-LD VideoObject embedUrl = "saglayici:id" (alfa/omega/gia/mydo)
-     *  2. GET /api/bot/{saglayici}?id={id} -> {"status":"success","stream_url":"..."}
-     *  stream_url, sitenin kendi HLS proxy'si (m3u8); Referer ile oynatilir.
+     * Yayin akisi (site 3 farkli embedUrl formu kullanıyor):
+     *  1. JSON-LD embedUrl = "saglayici:id" (alfa/omega/gia/mydo) -> GET /api/bot/{saglayici}?id=
+     *  2. JSON-LD embedUrl = dogrudan m3u8 URL'si (TRT kanallari vb.)
+     *  3. JSON-LD embedUrl = sitenin kendi /yayin/ sayfasi -> icinde saglayici:id veya m3u8 ara
      */
     override suspend fun loadLinks(
         data: String,
@@ -105,46 +105,86 @@ class CanliTVProvider : MainAPI() {
         if (!data.startsWith("http")) return false
         return try {
             val html = app.get(data, referer = "$mainUrl/").text
-            val embed = Regex("\"embedUrl\"\\s*:\\s*\"([a-z]+):(\\d+)\"")
-                .find(html)?.groupValues ?: return false
-            val provider = embed[1]
-            val id = embed[2]
+            val embedVal = Regex("\"embedUrl\"\\s*:\\s*\"([^\"]+)\"")
+                .find(html)?.groupValues?.get(1)?.replace("\\/", "/")?.trim()
+                ?: return false
 
-            val apiText = app.get(
-                "$mainUrl/api/bot/$provider?id=$id",
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to data,
-                    "Accept" to "application/json"
-                ),
-                referer = data
-            ).text
-
-            val json = runCatching { org.json.JSONObject(apiText) }.getOrNull() ?: return false
-            if (json.optString("status") != "success") return false
-            val streamUrl = json.optString("stream_url").replace("\\/", "/")
-                .takeIf { it.startsWith("http") } ?: return false
-
-            callback(
-                newExtractorLink(
-                    source = name,
-                    name = name,
-                    url = streamUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.referer = mainUrl
-                    quality = getQualityFromName("")
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to "$mainUrl/"
-                    )
+            when {
+                // 1) saglayici:id -> bot API
+                Regex("""^[a-z]+:\d+$""").matches(embedVal) -> {
+                    val provider = embedVal.substringBefore(':')
+                    val id = embedVal.substringAfter(':')
+                    resolveViaApi(provider, id, data, callback)
                 }
-            )
-            true
+                // 2) dogrudan m3u8
+                embedVal.startsWith("http") && embedVal.contains(".m3u8") -> {
+                    emitLiveLink(embedVal, callback)
+                    true
+                }
+                // 3) dahili relay/sayfa: icinde m3u8 veya saglayici:id ara (tek seviye)
+                embedVal.startsWith(mainUrl) -> {
+                    val inner = runCatching {
+                        app.get(embedVal, headers = mapOf("User-Agent" to USER_AGENT), referer = data).text
+                    }.getOrNull() ?: return false
+                    val innerProvider = Regex("\"embedUrl\"\\s*:\\s*\"([a-z]+):(\\d+)\"").find(inner)
+                    if (innerProvider != null) {
+                        resolveViaApi(innerProvider.groupValues[1], innerProvider.groupValues[2], data, callback)
+                    } else {
+                        val direct = Regex("""https?://[^"'\s\\]+?\.m3u8[^"'\s\\]*""").find(inner)?.value
+                            ?: return false
+                        emitLiveLink(direct, callback)
+                        true
+                    }
+                }
+                else -> false
+            }
         } catch (error: Exception) {
             Log.e(name, "Yayin cozulemedi ($data): ${error.message}")
             false
         }
+    }
+
+    private suspend fun resolveViaApi(
+        provider: String,
+        id: String,
+        channelUrl: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val apiText = app.get(
+            "$mainUrl/api/bot/$provider?id=$id",
+            headers = mapOf(
+                "User-Agent" to USER_AGENT,
+                "Referer" to channelUrl,
+                "Accept" to "application/json"
+            ),
+            referer = channelUrl
+        ).text
+
+        val json = runCatching { org.json.JSONObject(apiText) }.getOrNull() ?: return false
+        if (json.optString("status") != "success") return false
+        val streamUrl = json.optString("stream_url").replace("\\/", "/")
+            .takeIf { it.startsWith("http") } ?: return false
+
+        emitLiveLink(streamUrl, callback)
+        return true
+    }
+
+    private suspend fun emitLiveLink(url: String, callback: (ExtractorLink) -> Unit) {
+        callback(
+            newExtractorLink(
+                source = name,
+                name = name,
+                url = url,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = mainUrl
+                quality = getQualityFromName("")
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$mainUrl/"
+                )
+            }
+        )
     }
 
     private fun ogMeta(document: Element, property: String): String? {

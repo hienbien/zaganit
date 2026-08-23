@@ -2,6 +2,7 @@ package com.zaganit.hdfilmizleto
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import org.jsoup.nodes.Element
@@ -13,6 +14,9 @@ class HDFilmizleToProvider : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
+
+    // Cloudflare challenge'ini WebView ile cozer; tek ornek (cerezler korunsun)
+    private val cfKiller by lazy { CloudflareKiller() }
 
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Tum Icerik",
@@ -27,7 +31,7 @@ class HDFilmizleToProvider : MainAPI() {
             "${request.data.trimEnd('/')}/"
         }
         return try {
-            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             val results = document.select("a[href]").mapNotNull { it.toSearchResult() }
                 .distinctBy { it.url }
             newHomePageResponse(
@@ -81,7 +85,7 @@ class HDFilmizleToProvider : MainAPI() {
     override suspend fun search(query: String, page: Int): SearchResponseList {
         if (page > 1) return newSearchResponseList(emptyList(), hasNext = false)
         return try {
-            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+            val document = app.get("$mainUrl/", params = mapOf("s" to query.trim()), headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
             val results = document.select("a[href]").mapNotNull { it.toSearchResult() }.distinctBy { it.url }
             newSearchResponseList(results, hasNext = false)
         } catch (error: Exception) {
@@ -93,7 +97,7 @@ class HDFilmizleToProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query, 1).items
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").document
+        val document = app.get(url, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).document
 
         val rawTitle = document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst(".poster-title")?.text()?.trim()
@@ -162,7 +166,7 @@ class HDFilmizleToProvider : MainAPI() {
     ): Boolean {
         if (!data.startsWith("http")) return false
         return try {
-            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/").text
+            val html = app.get(data, headers = mapOf("User-Agent" to DESKTOP_UA, "Accept" to "text/html,application/xhtml+xml"), referer = "$mainUrl/", interceptor = cfKiller).text
             EmbedResolver.resolveAll(html, name, mainUrl, USER_AGENT, subtitleCallback, callback)
         } catch (error: Exception) {
             Log.e(name, "Baglantilar cozulemedi ($data): ${error.message}")
